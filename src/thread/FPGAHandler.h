@@ -15,34 +15,38 @@
 #include "network/server/TCPAcceptor.h"
 
 #include "api/ScanApi.h"
-#include "fpga/fpga.h"
+
+#include "fpga/operators/read_pred/sw/read_pred.h"
 
 class FPGAHandler: public ThreadHandler {
 
 	void siliconDB() {}
 	void opAtaTime() {}
 
-	FPGA fpga;
-	JOB_TYPE j_type;
-
 public:
 	FPGAHandler(Syncronizer *sync, EXEC_TYPE e_type, int thr_id) :
-		ThreadHandler(sync, e_type, thr_id) {
-		j_type = C_SCAN;
-	}
+		ThreadHandler(sync, e_type, thr_id) {}
 
 	void *run() {
+		JOB_TYPE j_type = C_SCAN;
 		this->thr_sync->waitOnStartBarrier();
 
-		fpga.connect(j_type);
-		printf("Connected to the accelerator for scan operator!\n");
+		READ_PRED read_pred_op(Types::getAclId(j_type));
 
-		fpga.alloc_buffer(getpagesize());
+		read_pred_op.writePredicate(this->scanAPI->FilterPredicate());
+		read_pred_op.waitAndWriteResponse();
 
-		fpga.notifyFPGA();
-		fpga.waitForFPGA();
+		/*
+		//1) Connect to the accelerator and 2) csrs manager
+		MEMORY_RW mem_rw_op(Types::getAclId(j_type));
 
-		fpga.close();
+		//3) Allocate a single page memory buffer
+		mem_rw_op.allocateBuffer(getpagesize());
+		//4) Send the address of the buffer to the accelerator over CSR
+		mem_rw_op.notifyAccelerator();
+		//5) Wait for the accelerator to write into the buffer
+		mem_rw_op.waitAndWriteResponse();
+		*/
 
 		this->thr_sync->waitOnEndBarrier();
 

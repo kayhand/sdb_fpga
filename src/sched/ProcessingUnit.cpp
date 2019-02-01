@@ -21,6 +21,7 @@ ProcessingUnit::~ProcessingUnit() {
 
 void ProcessingUnit::createProcessingUnit(Syncronizer *thr_sync) {
 	fpgaHandler = new FPGAHandler(thr_sync, sched_approach, 0);
+	fpgaHandler->setAPI(this->scanApi);
 
 	for (int i = 1; i < numOfComputeUnits; i++) {
 		CoreHandler *handler = new CoreHandler(thr_sync, sched_approach, i);

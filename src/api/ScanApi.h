@@ -49,6 +49,10 @@ public:
 		return this->baseColumn;
 	}
 
+	uint32_t& FilterPredicate(){
+		return this->scan_param;
+	}
+
 };
 
 #endif

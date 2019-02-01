@@ -1,0 +1,6 @@
+mem_rw.json
+
+C:../../../base/hw/rtl/base_sources.txt
+
++incdir+
+mem_rw_afu.sv

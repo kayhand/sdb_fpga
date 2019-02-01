@@ -99,8 +99,12 @@ public:
 	}
 
 	static const char* getAclId(JOB_TYPE j_type){
-		if (j_type < POST_AGG){
-			return "c6aa954a-9b91-4a37-abc1-1d9f0709dcc3";
+		if (j_type == LO_SCAN){
+			return "1cddcf01-c266-44de-af63-9d09858310e5";
+			}
+		else if(j_type == C_SCAN){
+			//return "a610831b-d12a-4d07-8368-1640faa3d0cd";
+			return "3336382d-3136-3430-6661-613364306364";
 		}
 		else
 			return "";

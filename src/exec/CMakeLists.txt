@@ -6,6 +6,9 @@ target_link_libraries(
     server_lib
     pthread
     sched_lib
+	mrw_lib
+	rp_lib
+    wrapper_lib
 )
 
 add_executable(sDB_client Client.cpp)
