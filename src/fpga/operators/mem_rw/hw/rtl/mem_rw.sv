@@ -95,6 +95,7 @@ module app_afu
         if (is_mem_addr_csr_write)
         begin
             mem_addr <= t_ccip_clAddr'(csrs.cpu_wr_csrs[0].data);
+            $display("AFU received buffer address!");
         end
     end
 
@@ -174,6 +175,7 @@ module app_afu
         begin
             // Request the write as long as the channel isn't full.
             fiu.c1Tx.valid <= ((state == STATE_RUN) && ! fiu.c1TxAlmFull);
+            //$display("AFU filled the buffer and returning now!");
         end
 
         fiu.c1Tx.hdr <= wr_hdr;

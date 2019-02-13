@@ -5,6 +5,8 @@
 #include "fpga/base/sw/opae_svc_wrapper.h"
 #include "fpga/base/sw/csr_mgr.h"
 
+#include "afu_json_info.h"
+
 class READ_PRED{
 
 private:
@@ -12,8 +14,13 @@ private:
 	CSR_MGR *csrs;
 
 public:
+	READ_PRED();
 	READ_PRED(const char* accel_uuid);
 	~READ_PRED();
+
+	bool isAccOK(){
+		return fpga_wrapper->isOk();
+	}
 
 	void connectToAccelerator();
 	void connectToCSRManager();

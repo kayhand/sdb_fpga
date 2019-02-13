@@ -83,7 +83,7 @@ public:
 	}
 
 	int PartSize(){
-		return this->PartSize();
+		return this->part_size;
 	}
 
 	uint64_t* Data(){

@@ -8,6 +8,10 @@
 #include <iostream>
 #include <string>
 
+READ_PRED::READ_PRED(){
+	fpga_wrapper = new OPAE_SVC_WRAPPER(AFU_ACCEL_UUID);
+	csrs = new CSR_MGR(*fpga_wrapper);
+}
 
 READ_PRED::READ_PRED(const char *accel_uuid){
 	fpga_wrapper = new OPAE_SVC_WRAPPER(accel_uuid);

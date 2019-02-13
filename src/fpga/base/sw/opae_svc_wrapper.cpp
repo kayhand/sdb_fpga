@@ -105,14 +105,68 @@ OPAE_SVC_WRAPPER::allocBuffer(size_t nBytes, uint64_t* ioAddress)
         r = fpgaPrepareBuffer(accel_handle, nBytes, &va, &wsid, 0);
         if (FPGA_OK != r) return NULL;
 
-        if (ioAddress)
+    	if (ioAddress)
         {
             r = fpgaGetIOAddress(accel_handle, wsid, ioAddress);
-            if (FPGA_OK != r) return NULL;
+            if (FPGA_OK != r) {
+            	printf("Error code: %d \n", r);
+            	return NULL;
+            }
+
+            printf("IO address: ");
+            cout << std::hex << ioAddress << endl;
+
         }
     }
 
     return va;
+}
+
+bool
+OPAE_SVC_WRAPPER::prepBuffer(size_t nBytes, void **buff_addr, uint64_t *ioAddress)
+{
+    fpga_result r;
+
+    roundUpBufferSize(nBytes, getpagesize()); // required when using a preallocated buffer
+    printf("Buffer size rounded upto %d! \n", nBytes);
+
+    if (mpfVtpIsAvailable(mpf_handle))
+    {
+    	printf("Using MPF VTP ... \n");
+    	r = mpfVtpPrepareBuffer(mpf_handle, nBytes, buff_addr, FPGA_BUF_PREALLOCATED);
+        if (FPGA_OK != r) return false;
+
+        if (ioAddress)
+        {
+            *ioAddress = mpfVtpGetIOAddress(mpf_handle, buff_addr);
+        }
+    }
+    else
+    {
+        // VTP is not available.  Map a page without a TLB entry.  nBytes
+        // must not be larger than a page.
+
+    	printf("Preparing buffer with %d bytes \n", nBytes);
+    	uint64_t wsid;
+        r = fpgaPrepareBuffer(accel_handle, getpagesize(), buff_addr, &wsid, FPGA_BUF_PREALLOCATED);
+        if (FPGA_OK != r) {
+        	printf("Error code: %d\n", r);
+        	return false;
+        }
+
+        cout << "Workspace id: " << wsid << endl;
+        if (ioAddress)
+        {
+        	printf("Getting ioAddress over wsid (%lu) ... \n", wsid);
+            r = fpgaGetIOAddress(accel_handle, wsid, ioAddress);
+            if (FPGA_OK != r) {
+            	cout << r << ": " << fpgaErrStr(r) << endl;
+            	return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 void

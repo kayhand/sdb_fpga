@@ -1,2 +1,3 @@
-add_subdirectory(mem_rw/sw)
-add_subdirectory(read_pred/sw)
+add_subdirectory(mem_rw)
+add_subdirectory(read_pred)
+add_subdirectory(read_block)

@@ -49,6 +49,13 @@ public:
 		return this->baseColumn;
 	}
 
+	uint64_t* DataBlock(int part_id, size_t &block_size){
+		int num_of_bits = this->baseColumn->BitEncoding() * this->baseColumn->PartSize();
+		block_size = num_of_bits / 8;
+
+		return this->partition_data[part_id];
+	}
+
 	uint32_t& FilterPredicate(){
 		return this->scan_param;
 	}

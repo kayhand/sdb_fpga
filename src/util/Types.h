@@ -104,6 +104,9 @@ public:
 			}
 		else if(j_type == C_SCAN){
 			//return "a610831b-d12a-4d07-8368-1640faa3d0cd";
+			return "A610831B-D12A-4D07-8368-1640FAA3D0CD";
+		}
+		else if(j_type == D_SCAN){
 			return "3336382d-3136-3430-6661-613364306364";
 		}
 		else

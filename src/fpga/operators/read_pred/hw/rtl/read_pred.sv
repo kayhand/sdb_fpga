@@ -41,15 +41,17 @@ module app_afu
     	// one with the "uuidgen" program and stored it in the AFU's JSON file.
     	// ASE and synthesis setup scripts automatically invoke afu_json_mgr
     	// to extract the UUID into afu_json_info.vh.
-    	csrs.afu_id = "a610831b-d12a-4d07-8368-1640faa3d0cd";
+    	csrs.afu_id = `AFU_ACCEL_UUID;
 
     	// Default
     	for (int i = 0; i < NUM_APP_CSRS; i = i + 1)
     	begin
     		csrs.cpu_rd_csrs[i].data = 64'(0);
-    	end
+    	end    	
     	
     	csrs.cpu_rd_csrs[0].data = param_value;
+    	
+    	$display("AFU initialized\n");
     end
 
     //
@@ -57,28 +59,29 @@ module app_afu
     //
 
     // CSR 1 triggers the read of parameter
-    logic parameter_ready;
+    logic parameter_ready = 1'b0;
     //t_ccip_clAddr parameter_addr;
 
     always_ff @(posedge clk)
     begin
-    	if (csrs.cpu_wr_csrs[1].en)
+    	if (csrs.cpu_wr_csrs[1].en && !parameter_ready)
     	begin
     		parameter_ready <= csrs.cpu_wr_csrs[1].en;
+    		$display("Received parameter!\n");
     	end
     end
       
-    logic csr_written;
+    logic csr_written = 1'b0;
     always_ff @(posedge clk)
     begin
-    	if (parameter_ready)
+    	if (parameter_ready && !csr_written)
     	begin
     		//csrs.cpu_rd_csrs[0].data <= csrs.cpu_wr_csrs[1].data;
     		param_value <= csrs.cpu_wr_csrs[1].data;
     		csr_written <= 1'b1;
+    		$display("Parameter value: %x\n", param_value);
     	end
     end
-    
        
     // =========================================================================
     //
@@ -89,10 +92,11 @@ module app_afu
     //
     // States in our simple example.
     //
-    typedef enum logic [0:0]
+    typedef enum logic [1:0]
     {
         STATE_IDLE,
-        STATE_RUN
+        STATE_RUN,
+        STATE_DONE
     }
     t_state;
 
@@ -114,16 +118,17 @@ module app_afu
             if ((state == STATE_IDLE) && parameter_ready)
             begin
                 state <= STATE_RUN;
-                $display("AFU running...");
+                //$display("AFU running...");
             end
 
             if ((state == STATE_RUN) && csr_written)
             begin
-                state <= STATE_IDLE;
+                state <= STATE_DONE;
                 $display("AFU done...");
             end
+            
         end
     end
-
+    
     
 endmodule // app_afu

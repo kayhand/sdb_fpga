@@ -56,6 +56,13 @@ public:
 	// Is the hardware simulated with ASE?
 	bool hwIsSimulated(void) const { return is_simulated; }
 
+	void roundUpBufferSize(size_t &buff_len, size_t base){
+		int remainder = buff_len % base;
+		if(remainder > 0){
+			buff_len += (base - remainder);
+		}
+	}
+
 	//
 	// Wrap MMIO write and read.
 	//
@@ -81,6 +88,7 @@ public:
 	// the I/O (physical) address if ioAddress isn't NULL.
 	//
 	void* allocBuffer(size_t nBytes, uint64_t *ioAddress = NULL);
+	bool prepBuffer(size_t nBytes, void **buf_addr, uint64_t *ioAddress);
 	void freeBuffer(void *va);
 
 protected:

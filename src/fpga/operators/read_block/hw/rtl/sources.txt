@@ -1,6 +1,6 @@
-mem_rw.json
+read_block.json
 
 C:/homes/kayhan/sdb_fpga/src/fpga/base/hw/rtl/base_sources.txt
 
 +incdir+
-mem_rw.sv
+read_block_cci.sv
