@@ -33,7 +33,6 @@ public:
 	}
 
 	~Partition(){
-		printf("Destroying partition...\n");
 		if(this->compressed != NULL){
 			delete[] this->compressed;
 		}
@@ -48,6 +47,20 @@ public:
 		//reserve bit_vector
 		this->array_size = total_bytes / 8;
 		this->compressed = new uint64_t[array_size];
+	}
+
+	void initializePageAlignedPartition(int bit_encoding){
+		int vals_per_word = 64 / bit_encoding;
+		int total_words = this->part_size / vals_per_word;
+
+		if(this->part_size % vals_per_word > 0)
+			total_words++;
+
+		//printf("Partition Size: %d\n", this->part_size);
+		//printf("Total 8-byte words required for this partition: %d\n", total_words);
+
+		//reserve bit_vector
+		this->compressed = new uint64_t[total_words];
 	}
 
 	void compress(std::ifstream &file, int num_of_bits){
@@ -79,7 +92,16 @@ public:
 
 			items_read++;
 		}
+
 		this->compressed[curIndex] = writtenVal; //? double check this
+		/*if(part_id == 0){
+			printf("[0]: %lu\n", this->compressed[0]);
+			printf("[1]: %lu\n", this->compressed[1]);
+			printf(".\n");
+			printf(".\n");
+			printf(".\n");
+			printf("[7]: %lu\n", this->compressed[7]);
+		}*/
 	}
 
 	int PartSize(){

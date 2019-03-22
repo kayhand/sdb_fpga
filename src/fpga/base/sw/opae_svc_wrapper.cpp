@@ -1,33 +1,3 @@
-//
-// Copyright (c) 2017, Intel Corporation
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// Redistributions of source code must retain the above copyright notice, this
-// list of conditions and the following disclaimer.
-//
-// Redistributions in binary form must reproduce the above copyright notice,
-// this list of conditions and the following disclaimer in the documentation
-// and/or other materials provided with the distribution.
-//
-// Neither the name of the Intel Corporation nor the names of its contributors
-// may be used to endorse or promote products derived from this software
-// without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
-
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -90,7 +60,10 @@ OPAE_SVC_WRAPPER::allocBuffer(size_t nBytes, uint64_t* ioAddress)
         // The region may be composed of multiple non-contiguous physical
         // pages.
         r = mpfVtpBufferAllocate(mpf_handle, nBytes, &va);
-        if (FPGA_OK != r) return NULL;
+        if (FPGA_OK != r) {
+        	printf("Error code (MPF allocate): %d \n", r);
+        	return NULL;
+        }
 
         if (ioAddress)
         {
@@ -113,8 +86,8 @@ OPAE_SVC_WRAPPER::allocBuffer(size_t nBytes, uint64_t* ioAddress)
             	return NULL;
             }
 
-            printf("IO address: ");
-            cout << std::hex << ioAddress << endl;
+            //printf("IO address: ");
+            //cout << std::hex << ioAddress << endl;
 
         }
     }
@@ -123,50 +96,70 @@ OPAE_SVC_WRAPPER::allocBuffer(size_t nBytes, uint64_t* ioAddress)
 }
 
 bool
-OPAE_SVC_WRAPPER::prepBuffer(size_t nBytes, void **buff_addr, uint64_t *ioAddress)
+OPAE_SVC_WRAPPER::prepMPFBuffer(size_t nBytes, void*& va, uint64_t* ioAddress)
 {
-    fpga_result r;
+    uint64_t wsid;
 
-    roundUpBufferSize(nBytes, getpagesize()); // required when using a preallocated buffer
-    printf("Buffer size rounded upto %d! \n", nBytes);
+    fpga_result r = mpfVtpPrepareBuffer(mpf_handle, nBytes, &va, FPGA_BUF_PREALLOCATED);
 
-    if (mpfVtpIsAvailable(mpf_handle))
-    {
-    	printf("Using MPF VTP ... \n");
-    	r = mpfVtpPrepareBuffer(mpf_handle, nBytes, buff_addr, FPGA_BUF_PREALLOCATED);
-        if (FPGA_OK != r) return false;
-
-        if (ioAddress)
-        {
-            *ioAddress = mpfVtpGetIOAddress(mpf_handle, buff_addr);
+    if (FPGA_OK != r) {
+        printf("Error code: %d \n", r);
+        printf("asked for %d bytes\n", nBytes);
+        if(&va == NULL){
+        	printf("Buffer is points to NULL!\n");
         }
-    }
-    else
-    {
-        // VTP is not available.  Map a page without a TLB entry.  nBytes
-        // must not be larger than a page.
-
-    	printf("Preparing buffer with %d bytes \n", nBytes);
-    	uint64_t wsid;
-        r = fpgaPrepareBuffer(accel_handle, getpagesize(), buff_addr, &wsid, FPGA_BUF_PREALLOCATED);
-        if (FPGA_OK != r) {
-        	printf("Error code: %d\n", r);
-        	return false;
-        }
-
-        cout << "Workspace id: " << wsid << endl;
-        if (ioAddress)
-        {
-        	printf("Getting ioAddress over wsid (%lu) ... \n", wsid);
-            r = fpgaGetIOAddress(accel_handle, wsid, ioAddress);
-            if (FPGA_OK != r) {
-            	cout << r << ": " << fpgaErrStr(r) << endl;
-            	return false;
-            }
-        }
+        return false;
     }
 
+    if (ioAddress)
+    {
+        *ioAddress = mpfVtpGetIOAddress(mpf_handle, va);
+
+        printf("Buffer start address (using MPF): ");
+        cout << std::hex << ioAddress << endl;
+    }
     return true;
+}
+
+bool
+OPAE_SVC_WRAPPER::prepBuffer(size_t nBytes, void*& va, uint64_t* ioAddress)
+{
+    uint64_t wsid;
+
+    fpga_result r = fpgaPrepareBuffer(accel_handle, nBytes, &va, &wsid, FPGA_BUF_PREALLOCATED);
+    if (FPGA_OK != r) return false;
+
+    if (ioAddress)
+    {
+
+        //*ioAddress = mpfVtpGetIOAddress(mpf_handle, va);
+
+        r = fpgaGetIOAddress(accel_handle, wsid, ioAddress);
+        if (FPGA_OK != r) {
+        	printf("Error code: %d \n", r);
+           	return false;
+        }
+    }
+    return true;
+}
+
+void
+OPAE_SVC_WRAPPER::printVTPStats(){
+	if (mpfVtpIsAvailable(mpf_handle)){
+		mpf_vtp_stats vtp_stats;
+        mpfVtpGetStats(mpf_handle, &vtp_stats);
+
+        cout << "#" << endl;
+        if (vtp_stats.numFailedTranslations)
+        {
+            cout << "# VTP failed translating VA: 0x" << hex << uint64_t(vtp_stats.ptWalkLastVAddr) << dec << endl;
+        }
+        cout << "# VTP PT walk cycles: " << vtp_stats.numPTWalkBusyCycles << endl
+             << "# VTP L2 4KB hit / miss: " << vtp_stats.numTLBHits4KB << " / "
+             << vtp_stats.numTLBMisses4KB << endl
+             << "# VTP L2 2MB hit / miss: " << vtp_stats.numTLBHits2MB << " / "
+             << vtp_stats.numTLBMisses2MB << endl;
+	}
 }
 
 void

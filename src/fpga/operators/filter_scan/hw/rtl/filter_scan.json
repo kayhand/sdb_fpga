@@ -9,9 +9,9 @@
       "accelerator-clusters":
          [
             {
-               "name": "read_block_cci",
+               "name": "filter_scan",
                "total-contexts": 1,
-               "accelerator-type-uuid": "332729aa-28af-11e9-bfc9-a4bf014f74bf"
+               "accelerator-type-uuid": "?"
             }
          ]
    }

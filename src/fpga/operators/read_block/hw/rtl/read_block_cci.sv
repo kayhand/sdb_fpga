@@ -34,20 +34,20 @@
 // =============================================================
 
 module app_afu
-	(
-	input  logic clk,
+		(
+		input  logic clk,
 
-	// Connection toward the host.  Reset comes in here.
-	cci_mpf_if.to_fiu fiu,
+		// Connection toward the host.  Reset comes in here.
+		cci_mpf_if.to_fiu fiu,
 
-	// CSR connections
-	app_csrs.app csrs,
+		// CSR connections
+		app_csrs.app csrs,
 
-	// MPF tracks outstanding requests.  These will be true as long as
-	// reads or unacknowledged writes are still in flight.
-	input  logic c0NotEmpty,
-	input  logic c1NotEmpty
-	);
+		// MPF tracks outstanding requests.  These will be true as long as
+		// reads or unacknowledged writes are still in flight.
+		input  logic c0NotEmpty,
+		input  logic c1NotEmpty
+		);
 
 	// Local reset to reduce fan-out
 	logic reset = 1'b1;
@@ -81,9 +81,37 @@ module app_afu
 		//
 		// Request wires
 		//
-		fiu.c0Tx = cci_mpf_cvtC0TxFromBase(af2mpf_sTx.c0);
+		fiu.c0Tx = cci_mpf_cvtC0TxFromBase(af2mpf_sTx.c0);		
+		
+		if (cci_mpf_c0TxIsReadReq(fiu.c0Tx))
+		begin
+			// Treat all addresses as virtual.  If MPF's VTP isn't
+			// enabled this field is ignored and addresses will remain
+			// physical.
+			fiu.c0Tx.hdr.ext.addrIsVirtual = 1'b1;
+
+			// Enable eVC_VA to physical channel mapping.  This will only
+			// be triggered when MPF's ENABLE_VC_MAP is set.
+			fiu.c0Tx.hdr.ext.mapVAtoPhysChannel = 1'b1;
+
+			// Enforce load/store and store/store ordering within lines.
+			// This will only be triggered when ENFORCE_WR_ORDER is set.
+			fiu.c0Tx.hdr.ext.checkLoadStoreOrder = 1'b1;
+		end
+
 		fiu.c1Tx = cci_mpf_cvtC1TxFromBase(af2mpf_sTx.c1);
-		fiu.c2Tx = af2mpf_sTx.c2;
+		if (cci_mpf_c1TxIsWriteReq(fiu.c1Tx))
+		begin
+			// See comments on the c0Tx fields above
+			fiu.c1Tx.hdr.ext.addrIsVirtual = 1'b1;
+			fiu.c1Tx.hdr.ext.mapVAtoPhysChannel = 1'b1;
+			fiu.c1Tx.hdr.ext.checkLoadStoreOrder = 1'b1;
+
+			// Don't ever request an MPF partial write
+			fiu.c1Tx.hdr.pwrite = t_cci_mpf_c1_PartialWriteHdr'(0);
+		end
+
+		fiu.c2Tx = af2mpf_sTx.c2;	
 	end
 	
 	// Connect to the AFU
@@ -100,6 +128,19 @@ module app_afu
 		);
 
 endmodule //app_afu
+
+localparam CL_BYTE_IDX_BITS = 6;
+typedef logic [$bits(t_cci_clAddr) + CL_BYTE_IDX_BITS - 1 : 0] t_byteAddr;
+
+function automatic t_cci_clAddr byteAddrToClAddr(t_byteAddr addr);
+	return addr[CL_BYTE_IDX_BITS +: $bits(t_cci_clAddr)];
+endfunction
+
+function automatic t_byteAddr clAddrToByteAddr(t_cci_clAddr addr);
+	return {addr, CL_BYTE_IDX_BITS'(0)};
+endfunction
+
+localparam CL_REQ_SIZE = 1;
 
 module app_afu_cci
 		(
@@ -119,75 +160,22 @@ module app_afu_cci
 		input  logic c1NotEmpty
 		);
 
-	// State transition parameters
-	logic read_issued = 1'b0;
-	logic read_processed = 1'b0;
-	logic write_issued = 1'b0;
-
-	// Output param
-	logic[63:0] write_block;
-
-	// Values that the AFU will write into some CSRs
-	// ====================================================================
-	//
-	//  CSRs (simple connections to the external CSR management engine)
-	//
-	// ====================================================================
-	always_comb
-	begin
-		csrs.afu_id = `AFU_ACCEL_UUID;		
-		for (int i = 0; i < NUM_APP_CSRS; i = i + 1)
-		begin
-			csrs.cpu_rd_csrs[i].data = 64'(0);
-		end
-	
-		csrs.cpu_rd_csrs[0].data = write_issued;
-		csrs.cpu_rd_csrs[1].data = write_block;		
-	end
-
-	// AFU receives two MMIO writes
-	// CSR[0] -> keeps the address of the write buffer
-	// CSR[1] -> keeps the address of the read buffer
-
-	logic rd_block_ready; //state transition param
-
-	t_ccip_clAddr rd_block_addr; //42 bits
-	t_ccip_clAddr wr_block_addr; //42 bits
-
-	always_ff @(posedge clk)
-	begin
-		if (csrs.cpu_wr_csrs[0].en)
-		begin
-			wr_block_addr <= t_ccip_clAddr'(csrs.cpu_wr_csrs[0].data);	
-			$display("Write block address received: %h!", wr_block_addr);
-		end
-	end
-
-	always_ff @(posedge clk)
-	begin
-		if (csrs.cpu_wr_csrs[1].en)
-		begin
-			rd_block_ready <= csrs.cpu_wr_csrs[1].en;
-			rd_block_addr <= t_ccip_clAddr'(csrs.cpu_wr_csrs[1].data);
-			$display("Read block address received: %h!", rd_block_addr);
-		end
-	end
-
-	// =========================================================================
-	//
-	//   State machine
-	//
-	// =========================================================================
-
 	typedef enum logic [1:0]
-		{
+	{
 		STATE_IDLE,
 		STATE_READ,
-		STATE_WRITE
+		STATE_WRITE,
+		STATE_DONE
 	}
 	t_state;
-
+	
 	t_state state;
+	// State transition parameters
+	logic new_block_received;
+	logic reads_done;
+	logic write_block_ready;
+	logic writes_done;
+
 	always_ff @(posedge clk)
 	begin
 		if (reset)
@@ -196,35 +184,150 @@ module app_afu_cci
 		end
 		else
 		begin
-			case (state)
+			case (state)			
 				STATE_IDLE:
 				begin
-					if (rd_block_ready)
+					if (new_block_received || !reads_done)
 					begin
-						$display("AFU starting to read the block!");
 						state <= STATE_READ;
 					end
-				end
-				STATE_READ:
-				begin
-					if(read_processed)
+					else if (writes_done)
 					begin
-						$display("AFU processed the read block!");
-						state <= STATE_WRITE;	
+						state <= STATE_DONE;	
 					end
 				end
+
+				STATE_READ:
+				begin
+					if (write_block_ready)
+					begin
+						state <= STATE_WRITE;
+					end
+					else if(reads_done)
+					begin
+						state <= STATE_IDLE;
+					end
+				end
+
 				STATE_WRITE:
 				begin
-					if (write_issued)
+					if (!cp2af_sRx.c1TxAlmFull)
 					begin
-						$display("AFU processed the write block!");
 						state <= STATE_IDLE;
-						rd_block_ready <= 1'b0;
 					end
 				end
 			endcase
 		end
+	end	
+	
+	t_state curr_state;
+	always_comb
+	begin		
+		curr_state = state;
+		case (state)			
+			STATE_IDLE:
+			begin
+				$display("\n 	+++++++++++");
+				$display(" 	IDLE STATE!");				
+				$display(" 	+++++++++++\n");
+			end
+
+			STATE_READ:
+			begin
+				$display("\n 	+++++++++++");
+				$display(" 	READ STATE! (cls: %0d) (reads done? %0d)", last_cl, reads_done);
+				//$display(" 	READ STATE!");
+				$display(" 	+++++++++++\n");
+			end
+
+			STATE_WRITE:
+			begin
+				$display("\n 	+++++++++++");
+				$display("  WRITE STATE!");
+				$display("  +++++++++++\n");
+			end
+			
+			STATE_DONE:
+			begin
+				$display("\n 	+++++++++++");				
+				$display(" 	PROCESSING DONE! (last_res: %0d) (writes_done? %0d)", last_res, writes_done);
+				$display("  +++++++++++\n");
+			end
+		endcase
 	end
+
+	logic write_issued = 0;	   // --  WRITE -> READ	(after a WRITE_REQUEST)
+
+	logic query_completed = 0;  // --  IDLE  -> DONE	(CSR[4])
+
+	// Last cache line id this AFU processed
+	logic[6:0] last_cl_block = 0; // 1 to 32
+	logic[6:0] last_cl = 0; // 1 to 64
+	logic[3:0] last_res = 0; // 0 to 8 (for every 8 cache-line (512 values) issue a main-memory write
+	
+	/*** 
+	 * 	STEP 1: READ IN QUERY PARAMETERS
+	 *	  -> CSR[0]: number of cache lines to read from the corresponding partition
+	 *	  -> CSR[1]: filter comparison value	 	
+	 ***/
+
+	logic[6:0] total_cl; //total cache lines to read -- SW writes it to the first CSR
+	logic[6:0] total_cl_blocks;
+	logic[31:0] filter_pred; // predicate for the scan operation -- SW writes it to the second CSR
+	always_ff @(posedge clk)
+	begin
+		if (csrs.cpu_wr_csrs[0].en)
+		begin
+			total_cl <= csrs.cpu_wr_csrs[0].data;
+			total_cl_blocks <= csrs.cpu_wr_csrs[0].data / CL_REQ_SIZE;
+			$display("\nAFU will read %0d cache lines in total!", csrs.cpu_wr_csrs[0].data);		
+		end
+		if (csrs.cpu_wr_csrs[1].en)
+		begin
+			filter_pred <= csrs.cpu_wr_csrs[1].data;
+			$display("AFU received the filter predicate: %0d\n", csrs.cpu_wr_csrs[1].data);		
+		end
+	end
+
+	/*** 
+	 * 	STEP 2: SWITCH TO THE READ MODE
+	 * 	STEP 3: READ IN THE READ BLOCK ADDRESS
+	 *	- CSR[2]: read block address
+	***/
+	
+	t_ccip_clAddr read_buff_address;
+	t_ccip_clAddr write_buff_address;
+	
+	always_ff @(posedge clk)
+	begin
+		new_block_received <= csrs.cpu_wr_csrs[2].en;
+		if (csrs.cpu_wr_csrs[2].en)
+		begin			
+			read_buff_address <= byteAddrToClAddr(csrs.cpu_wr_csrs[2].data);		
+		end
+	end
+	
+	always_ff @(posedge clk)
+	begin
+		if(new_block_received)
+		begin
+			$display("Read buffer address: %0h", read_buff_address);
+		end
+	end
+	
+	always_ff @(posedge clk)
+	begin
+		if (csrs.cpu_wr_csrs[3].en)
+		begin
+			write_buff_address <= byteAddrToClAddr(csrs.cpu_wr_csrs[3].data);
+			$display("Write buffer address: %0h\n", 
+					byteAddrToClAddr(csrs.cpu_wr_csrs[3].data));
+		end	
+	end	
+	
+	//is last READ RESP received?
+	assign reads_done = (last_cl == total_cl);
+	assign requests_done = (last_cl_block == total_cl_blocks);
 
 	// Reading from main-memory (Channel 0)
 	// 1) Issue read request (Port Rx)
@@ -235,160 +338,219 @@ module app_afu_cci
 	//		 -> address (t_ccip_clAddr) 
 	//		 -> mdata (t_ccip_mdata)
 	//    -- set the request valid flag
-
-	t_ccip_clAddr rd_addr;
-	logic rd_needed = 1'b0;
-	logic rd_issued = 1'b0;
-	
+		
+	//Check if reads are allowed in this cycle and update accordingly for next one
+	logic reads_allowed;
 	always_ff @(posedge clk)
 	begin
-		if(reset)
+		if (reset)
 		begin
-			rd_needed <= 1'b0;
+			reads_allowed <= 1'b0;
 		end
 		else
-		begin
-			if(rd_block_ready && !rd_issued)
+		begin			
+			if(reads_allowed)
 			begin
-				rd_needed <= rd_block_ready;
-				rd_addr <= t_ccip_clAddr'(rd_block_addr);
-				$display("Data ready in address %h", rd_addr);				
+				//clear reads for this cycle
+				reads_allowed <= cp2af_sRx.c0TxAlmFull;
+			end
+			else
+			begin
+				//turn back on read request when there is a response
+				reads_allowed <= new_block_received ||
+					(!reads_done && !requests_done && cci_c0Rx_isReadRsp(cp2af_sRx.c0));
 			end
 		end
 	end
-	
+	 
+	// READ HEADER SETUP
+	t_cci_clAddr read_address;
 	t_ccip_c0_ReqMemHdr read_req_hdr;
 	always_comb
 	begin
+		read_req_hdr = t_ccip_c0_ReqMemHdr'(0);
+		
 		read_req_hdr.vc_sel = eVC_VA;
 		read_req_hdr.cl_len = eCL_LEN_1;
 		read_req_hdr.req_type = eREQ_RDLINE_I;
-		read_req_hdr.mdata = t_ccip_mdata'(0);
-	
-		read_req_hdr.address = rd_addr;
 		
-		if(rd_needed)
-		begin
-			$display("Read header created with address %h", read_req_hdr.address);
-		end
+		read_req_hdr.mdata = last_cl_block;
+		read_req_hdr.address = read_buff_address + (last_cl_block * CL_REQ_SIZE);		
 	end
 	
-
-	//Issue a READ_REQUEST
+	// Send read requests to the FIU
 	always_ff @(posedge clk)
 	begin
-		if(reset)
+		if (reset)
 		begin
-			af2cp_sTx.c0.valid <= 1'b0;
+			af2cp_sTx.c0.valid <= 1'b0;	
 		end
 		else
 		begin
-			//clearValids
-			af2cp_sTx.c0.valid <= 1'b0;
-				
+			// Generate a read request when allowed and the FIU isn't full
+			af2cp_sTx.c0.valid <= (!reads_done && reads_allowed && ! cp2af_sRx.c0TxAlmFull);
 			af2cp_sTx.c0.hdr <= read_req_hdr;
-			af2cp_sTx.c0.valid <= rd_needed && !cp2af_sRx.c0TxAlmFull;
-			
-			if(rd_needed && !rd_issued && !cp2af_sRx.c0TxAlmFull)
+
+			if (!reads_done && reads_allowed && !cp2af_sRx.c0TxAlmFull)
 			begin
-				$display("Issuing a read request for %h", read_req_hdr.address);
-			
-				rd_issued <= 1'b1;
-				rd_needed <= 1'b0;
+				//$display("==> REQ for CL block #%d ==>\n", last_cl_block);
+				last_cl_block <= last_cl_block + 1;
 			end
 		end
 	end
-
-	logic rd_returned;
+	
+	/*** 
+	 * 	STEP 6: PROCESS A READ RESPONSE -- APPLY THE FILTER
+	 ***/
+	t_ccip_clData write_block;
+	t_ccip_c0_RspMemHdr read_rsp_hdr;
 	t_ccip_clData rsp_data;
-	//Check if a READ_RESPONSE ready
+	
+	logic [5:0] cl_block_id;
+	logic [1:0] cl_id;
+	
+	logic rsp_received = 0;
 	always_ff @(posedge clk)
-	if(cp2af_sRx.c0.rspValid && !read_processed)
 	begin
-		$display("Read response received!");
+		rsp_received <= cci_c0Rx_isReadRsp(cp2af_sRx.c0);
 		rsp_data <= cp2af_sRx.c0.data;
+	
+		cl_block_id <= cp2af_sRx.c0.hdr.mdata;
+		cl_id <= cp2af_sRx.c0.hdr.cl_num;
 		
-		$display("    Received entry v%0d: %0d",
-				fiu.c0Rx.hdr.cl_num, cp2af_sRx.c0.data[63:0]);			
-		$display("Second entry is: %d", rsp_data[127:64]);		
-		$display("Second entry is: %d", cp2af_sRx.c0.data[127:64]);
-		
-		write_block <= cp2af_sRx.c0.data[63:0];
-		read_processed <= 1'b1;
-		write_issued <= 1'b1;
+		if (cci_c0Rx_isReadRsp(cp2af_sRx.c0))
+		begin
+			//$display("<== RESP %0d FOR CL block %0d <==", cp2af_sRx.c0.hdr.cl_num, cp2af_sRx.c0.hdr.mdata);
+			last_cl <= last_cl + 1;
+		end
 	end
 	
-/*
+	// Compute the filter result for the received data
+	logic [511:0] bit_result;
+	
+	/*
+	filter_scan
+		filter
+		(
+			.clk,
+			.reset(reset || new_block_received),
+			.en(rsp_received),
+			.data_block(rsp_data),
+			.predicate(filter_pred),
+			.block_id(cl_block_id * CL_REQ_SIZE + cl_id),
+			.filter_result(bit_result)
+		);	 
+	*/
+	
+	filter_scan
+		filter_1
+		(
+			.clk,
+			.reset(reset || new_block_received),
+			.en(rsp_received && (cl_id == 0)),
+			.data_block(rsp_data),
+			.predicate(filter_pred),
+			.block_id(cl_block_id * CL_REQ_SIZE + cl_id),
+			.filter_result(bit_result)
+		);
+	
+	
+	 filter_scan
+		filter_2
+		(
+				.clk,
+				.reset(reset || new_block_received),
+				.en(rsp_received && (cl_id == 1)),
+				.data_block(rsp_data),
+				.predicate(filter_pred),
+				.block_id(cl_block_id * CL_REQ_SIZE + cl_id),
+				.filter_result(bit_result)
+		);
+		
+	filter_scan
+		filter_3
+		(
+				.clk,
+				.reset(reset || new_block_received),
+				.en(rsp_received && (cl_id == 2)),
+				.data_block(rsp_data),
+				.predicate(filter_pred),
+				.block_id(cl_block_id * CL_REQ_SIZE + cl_id),
+				.filter_result(bit_result)
+		);
+		
+	filter_scan
+		filter_4
+		(
+			.clk,
+			.reset(reset || new_block_received),
+			.en(rsp_received && (cl_id == 3)),
+			.data_block(rsp_data),
+			.predicate(filter_pred),
+			.block_id(cl_block_id * CL_REQ_SIZE + cl_id),
+			.filter_result(bit_result)
+		);
+		
+	assign write_block_ready = rsp_received && ((last_cl % 8) == 0);
+	
+	t_ccip_c1_ReqMemHdr write_hdr;
+	always_comb
+	begin
+		write_hdr = t_cci_c1_ReqMemHdr'(0);
+	
+		write_hdr.vc_sel = eVC_VA;
+		write_hdr.sop = 1'b1;
+		write_hdr.cl_len = eCL_LEN_1;
+		write_hdr.req_type = eREQ_WRLINE_I; //no intent to cache
+		write_hdr.address = write_buff_address + last_res;
+	
+		//$display("Writing result %0b", bit_result);
+		//$display("Write header created with address %h", write_hdr.address);
+	end
+
+	//assign af2cp_sTx.c1.data = t_ccip_clData'(bit_result);
+	// Control logic for memory writes
 	always_ff @(posedge clk)
 	begin
-		if(read_processed)
+		if (reset)
 		begin
-			write_block <= rsp_data[127:64];
-			write_issued <= 1'b1;			
+			af2cp_sTx.c1.valid <= 1'b0;
 		end
-	end
-*/
-	// ==========================================================================
-	//  WRITE LOGIC -- after reaching WRITE_STATE  
-	//	Step 1:	Prepare a WRITE REQUEST by defining the c1_ReqMemHdr
-	//	Step 2: Send the WRITE REQUEST
-	//	Step 3: Receive the RESPONSE for WRITE REQUEST
-	// ==========================================================================
-
-	// Writing into main-memory (Channel 1) -- structs from cci-if/ccip_if_pkg.sv
-	// ==========================================================================
-	// 1) Issue write request (Port Tx) -- t_if_ccip_c1_Tx
-	//    -- Create the request header, hdr (t_ccip_c1_ReqMemHdr)
-	//		 -> vc_sel (t_ccip_vc)
-	//		 -> sop
-	//		 -> cl_len
-	//		 -> req_type (t_ccip_c1_req)
-	//		 -> address (t_ccip_clAddr)
-	//		 -> mdata (t_ccip_mdata)
-	//    -- data to write into (t_ccip_clData)
-	//    -- set the request valid flag
-	// ==========================================================================
-
-	/*
-t_ccip_c1_ReqMemHdr write_hdr;
-
-always_comb
-begin
-	//Initialize header
-	write_hdr = t_cci_c1_ReqMemHdr'(0);
-	
-	write_hdr.vc_sel = eVC_VA;
-	write_hdr.sop = 1'b1;
-	write_hdr.cl_len = eCL_LEN_1;
-	write_hdr.req_type = eREQ_WRLINE_I;
-	write_hdr.address = wr_block_addr;
-	
-	$display("Write header created/updated!");
-end
-
-//assign fiu.c1Tx.data = t_ccip_clData'({ block_part_4, 64'h1 });
-assign af2cp_sTx.c1.data = t_ccip_clData'('h0021646c726f77206f6c6c6548);
-
-always_ff @(posedge clk)
-begin
-	if(reset)
-	begin
-		af2cp_sTx.c1.valid <= 1'b0;
-	end
-	else
-	begin
-		// Request the write as long as the channel isn't full.
-		af2cp_sTx.c1.valid <= ((state == STATE_WRITE) &&
-				! cp2af_sRx.c1TxAlmFull);
-		if(af2cp_sTx.c1.valid)
+		else
 		begin
-			$display("write issued!");
+			// Request the write as long as the channel isn't full.
+			af2cp_sTx.c1.data <= t_ccip_clData'(bit_result);
+			af2cp_sTx.c1.valid <= ((state == STATE_WRITE) && !cp2af_sRx.c1TxAlmFull);
+			
+			if((state == STATE_WRITE) && !cp2af_sRx.c1TxAlmFull)
+			begin				
+				$display("  WRITE REQUEST (%d)!", last_res);
+				last_res <= last_res + 1;
+			end
 		end
+		af2cp_sTx.c1.hdr <= write_hdr;
 	end
-	af2cp_sTx.c1.hdr <= write_hdr;
-end
-	 */
-
+	
+	assign writes_done = (last_res >= (total_cl / 8));
+	
+	//assign af2cp_sTx.c0.valid = 1'b0;
+	//assign af2cp_sTx.c1.valid = 1'b0;
 	assign af2cp_sTx.c2.mmioRdValid = 1'b0;
 
+	// CSRS writes to notify the SW about processing	
+	always_comb
+	begin
+		csrs.afu_id = `AFU_ACCEL_UUID;		
+		for (int i = 0; i < NUM_APP_CSRS; i = i + 1)
+		begin
+			csrs.cpu_rd_csrs[i].data = 64'(0);
+		end
+	
+		csrs.cpu_rd_csrs[0].data = last_cl; //last cache line processed
+		csrs.cpu_rd_csrs[1].data = last_res; //last bit vector result generated
+		
+		//csrs.cpu_rd_csrs[2].data = (reads_done && !af2cp_sTx.c1.valid);
+		csrs.cpu_rd_csrs[2].data = reads_done && writes_done;
+	end
+	
 endmodule // app_afu_cci

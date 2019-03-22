@@ -19,17 +19,18 @@ int main(int argc, char** argv) {
 
 	Table customer("customer");
 	customer.initializeTable(data_path + "customer/"); // ~/data/ssb/customer/
-	int num_of_partitions = customer.NumOfElements() / partition_size; //(30000 / 15000)
-	printf("Number of partitions: %d\n", num_of_partitions);
+	//int num_of_partitions = customer.NumOfElements() / partition_size; //(30000 / 15000)
+	//printf("Number of partitions: %d\n", num_of_partitions);
 
-	Column *c_mktsegment = new Column("c_mktsegment");
+	Column *c_mktsegment = new Column("c_mktsegment", customer.NumOfElements());
 	c_mktsegment->initializeColumn(customer.Path() + "c_mktsegment/"); // ~/data/ssb/customer/c_mktsegment/
-	c_mktsegment->initializePartitions(num_of_partitions, partition_size);
+	//c_mktsegment->initializePartitions(num_of_partitions, partition_size);
+	int num_of_partitions = c_mktsegment->initializePageAlignedPartitions(4096);
 	c_mktsegment->compressColumn();
 
 	customer.addColumn(c_mktsegment);
 
-	uint32_t comp_val = c_mktsegment->CompressValue("BUILDING");
+	uint32_t comp_val = c_mktsegment->CompressValue("FURNITURE");
 	ScanApi *scan = new ScanApi(c_mktsegment, EQ, comp_val);
 	scan->initializeScanOperator(customer.NumOfElements());
 

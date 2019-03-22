@@ -31,13 +31,17 @@ private:
 
 	std::string colPath;
 	std::string colName;
+	int colSize;
 
 	int data_type = 2; // c_mktsegment/meta.dat -- data_type
+	int num_of_pages = 0; //number of memory pages required
+
 	std::vector<Partition*> partitions;
 
 public:
-	Column(std::string col_name){
+	Column(std::string col_name, int col_size){
 		this->colName = col_name;
+		this->colSize = col_size;
 	}
 
 	~Column(){
@@ -110,6 +114,26 @@ public:
 	}
 
 	/*
+	 * Create a partition out of each page
+	 */
+	int initializePageAlignedPartitions(int page_size){
+		int num_of_pages = NumOfPagesRequired(page_size);
+		int partition_size = (page_size * 8) / this->c_encoder.num_of_bits;
+
+		int partId = 0;
+		for(; partId < num_of_pages; partId++){
+			int start = partId * partition_size;
+			partitions.push_back(new Partition(partId, start, start + partition_size));
+		}
+
+		//int start = partId * partition_size;
+		//int end = this->colSize - 1;
+		//partitions.push_back(new Partition(partId, start, end));
+
+		return num_of_pages;
+	}
+
+	/*
 	 * Create compressed bit vectors for each partition
 	 */
 	void compressColumn(){
@@ -117,18 +141,12 @@ public:
 		compressed_file.open(this->colPath + "compressed.dat");
 
 		for(Partition *curPart : partitions){
-			curPart->initializePartition(c_encoder.num_of_bits);
+			//curPart->initializePartition(c_encoder.num_of_bits);
+			curPart->initializePageAlignedPartition(c_encoder.num_of_bits);
 			curPart->compress(compressed_file, c_encoder.num_of_bits);
 		}
 
 		compressed_file.close();
-	}
-
-	int NumOfElements(){
-		int total = 0;
-		for(Partition *part : partitions)
-			total += part->PartSize();
-		return total;
 	}
 
 	int NumOfPartitions(){
@@ -153,6 +171,16 @@ public:
 
 	uint32_t CompressValue(std::string uncompressed){
 		return this->c_encoder.dictionary[uncompressed];
+	}
+
+	int NumOfPagesRequired(int p_size){
+		int totalSize = (this->c_encoder.num_of_bits * this->colSize) / 8;
+
+		this->num_of_pages = totalSize / p_size;
+		if(totalSize % p_size > 0)
+			this->num_of_pages++;
+
+		return this->num_of_pages;
 	}
 
 };

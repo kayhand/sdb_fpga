@@ -56,5 +56,4 @@ public:
 	}
 };
 
-
 #endif /* SRC_DATA_MICROBENCH_TABLE_H_ */
