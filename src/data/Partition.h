@@ -12,6 +12,8 @@
 #include <vector>
 #include <fstream>
 
+#define PAGE_SIZE 4096
+
 class Partition {
 private:
 	int part_id;
@@ -50,17 +52,18 @@ public:
 	}
 
 	void initializePageAlignedPartition(int bit_encoding){
-		int vals_per_word = 64 / bit_encoding;
-		int total_words = this->part_size / vals_per_word;
+		int vals_per_word = 64 / bit_encoding; // 64 / 16 = 4
+		int total_words = this->part_size / vals_per_word; // 2048 / 4 = 512
 
 		if(this->part_size % vals_per_word > 0)
 			total_words++;
 
-		//printf("Partition Size: %d\n", this->part_size);
-		//printf("Total 8-byte words required for this partition: %d\n", total_words);
+		//printf("Partition Size: %d (bit-encoding: %d)\n", this->part_size,  bit_encoding);
+		//printf("Total 8-byte words: %d\n", total_words);
 
 		//reserve bit_vector
 		this->compressed = new uint64_t[total_words];
+		this->array_size = total_words;
 	}
 
 	void compress(std::ifstream &file, int num_of_bits){
@@ -108,11 +111,12 @@ public:
 		return this->part_size;
 	}
 
+
 	uint64_t* Data(){
 		return this->compressed;
 	}
 
-	int DataArraySize(){
+	int DataBufferSize(){
 		return this->array_size;
 	}
 

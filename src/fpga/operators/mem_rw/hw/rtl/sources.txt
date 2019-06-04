@@ -1,6 +1,0 @@
-mem_rw.json
-
-C:/homes/kayhan/sdb_fpga/src/fpga/base/hw/rtl/base_sources.txt
-
-+incdir+
-mem_rw.sv

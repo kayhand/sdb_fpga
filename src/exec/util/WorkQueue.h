@@ -18,6 +18,7 @@ class WorkQueue {
 
 	atomic<Node*> head;
 	atomic<Node*> tail;
+
 public:
 	WorkQueue() {
 		this->mq_id = -1;
@@ -44,6 +45,7 @@ public:
 	}
 
 	~WorkQueue() {
+		printf("Releasing queue %d...\n", this->mq_id);
 		delete headNode;
 	}
 
@@ -110,6 +112,10 @@ public:
 				}
 			}
 		}
+	}
+
+	void setId(int q_id){
+		this->mq_id = q_id;
 	}
 
 	int getId() {

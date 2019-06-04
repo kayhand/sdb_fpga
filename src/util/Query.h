@@ -46,7 +46,7 @@ public:
 private:
 	int p_type = -1;
 	int part_id = -1;
-	JOB_TYPE job_type = LO_SCAN;
+	JOB_TYPE job_type = LD_JOIN;
 	bool dax_flag = false;
 };
 

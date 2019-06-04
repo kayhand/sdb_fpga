@@ -1,2 +1,2 @@
-add_subdirectory(base/sw)
-add_subdirectory(operators)
+add_subdirectory(base)
+add_subdirectory(processing)

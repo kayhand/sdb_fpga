@@ -20,7 +20,6 @@ OPAE_SVC_WRAPPER::OPAE_SVC_WRAPPER(const char *accel_uuid) :
 
     // Don't print verbose messages in ASE by default
     setenv("ASE_LOG", "0", 0);
-
     // Is the hardware simulated with ASE?
     is_simulated = probeForASE();
 
@@ -106,7 +105,7 @@ OPAE_SVC_WRAPPER::prepMPFBuffer(size_t nBytes, void*& va, uint64_t* ioAddress)
         printf("Error code: %d \n", r);
         printf("asked for %d bytes\n", nBytes);
         if(&va == NULL){
-        	printf("Buffer is points to NULL!\n");
+        	printf("Buffer points to NULL!\n");
         }
         return false;
     }

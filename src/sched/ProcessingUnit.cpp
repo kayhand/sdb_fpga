@@ -12,45 +12,65 @@ ProcessingUnit::ProcessingUnit(int num_of_cus) {
 }
 
 ProcessingUnit::~ProcessingUnit() {
-	delete fpgaHandler;
 	for (CoreHandler* curHandler : coreHandlers)
 		delete curHandler;
+	delete fpgaHandler;
 
-	delete scanApi;
+	//delete scanQueue.getHead();
+	//delete joinQueue.getHead();
+
+	delete lo_dsc_scan;
+	delete lo_qty_scan;
+	delete d_scan;
+	delete c_scan;
+
+	delete join;
 }
 
-void ProcessingUnit::createProcessingUnit(Syncronizer *thr_sync) {
-	fpgaHandler = new FPGAHandler(thr_sync, sched_approach, 0);
-	fpgaHandler->setAPI(this->scanApi);
+void ProcessingUnit::createProcessingUnit(Syncronizer *thr_sync, PARALLELISM parallel_units){
+	fpgaHandler = new FPGAHandler(thr_sync, sched_approach, 0, parallel_units);
+
+	fpgaHandler->setQueues(&scanQueue, &joinQueue);
+	fpgaHandler->setFPGAQueue(&fpgaQueue);
+
+	fpgaHandler->setScanAPIs(lo_dsc_scan, lo_qty_scan, lo_odate_scan, d_scan, c_scan);
+	fpgaHandler->setJoinAPI(join);
 
 	for (int i = 1; i < numOfComputeUnits; i++) {
 		CoreHandler *handler = new CoreHandler(thr_sync, sched_approach, i);
-		handler->setQueues(&sharedQueue, &swQueue, &hwQueue);
-		handler->setAPI(this->scanApi);
+
+		handler->setQueues(&scanQueue, &joinQueue);
+
+		handler->setScanAPIs(lo_dsc_scan, lo_qty_scan, lo_odate_scan, d_scan, c_scan);
+		handler->setJoinAPI(join);
 
 		coreHandlers.push_back(handler);
 	}
 }
 
-void ProcessingUnit::addScanItems(int total_parts, JOB_TYPE scan_job, int sf, WorkQueue *queue) {
-	printf("Adding for table (id: %d), # of parts: %d\n", scan_job, total_parts);
-
-	for (int i = 0; i < sf; i++) {
-		for (int p_id = 0; p_id < total_parts; p_id++) {
-			Query item(0, p_id, scan_job); //(0: sw - 1:hw, part_id, table_id)
-			Node *newNode = new Node(item);
-			queue->add(newNode);
-		}
+void ProcessingUnit::addScanItems(int num_of_parts, JOB_TYPE scan_job){
+	for (int p_id = 0; p_id < num_of_parts; p_id++) {
+		Query item(0, p_id, scan_job); //(0: sw - 1:hw, part_id, table_id)
+		Node *newNode = new Node(item);
+		scanQueue.add(newNode);
 	}
 }
 
-void ProcessingUnit::initWorkQueues(int sf) {
-	int num_of_parts = this->scanApi->BaseColumn()->NumOfPartitions();
+void ProcessingUnit::addJoinItems(int num_of_parts, JOB_TYPE join_job){
+	for (int p_id = 0; p_id < num_of_parts; p_id++) {
+		Query item(0, p_id, join_job); //(0: sw - 1:hw, part_id, table_id)
+		Node *newNode = new Node(item);
+		joinQueue.add(newNode);
+	}
+}
 
-	this->addScanItems(num_of_parts, C_SCAN, sf, getSharedQueue());
-
-	printf("Scan Queue\n");
-	getSharedQueue()->printQueue();
+void ProcessingUnit::addWorkItems(ScanApi *&baseScan, WorkQueue &queue){
+	for (int p_id = 0; p_id < baseScan->TotalPartitions(); p_id++) {
+	//for (int p_id = 0; p_id < 1; p_id++) {
+		Query item(0, p_id, baseScan->JobType());
+		Node *newNode = new Node(item);
+		queue.add(newNode);
+	}
 }
 
 void ProcessingUnit::startThreads(TCPStream* connection) {

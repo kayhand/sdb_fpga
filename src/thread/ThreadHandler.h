@@ -12,6 +12,7 @@
 #include "network/server/TCPAcceptor.h"
 
 #include "api/ScanApi.h"
+#include "api/JoinApi.h"
 
 enum EXEC_TYPE {
 	SDB = 1,
@@ -30,23 +31,34 @@ protected:
 	EXEC_TYPE eType;
 	int thr_id = -1;
 
-	WorkQueue* shared_queue = NULL;
-	WorkQueue* hw_queue = NULL;
-	WorkQueue* sw_queue = NULL;
+	WorkQueue* scan_queue = NULL;
+	WorkQueue* join_queue = NULL;
+
+	WorkQueue* fpga_queue = NULL;
 
 	TCPStream* t_stream = NULL;
 
-	ScanApi *scanAPI = NULL;
+	ScanApi *lo_discount = NULL;
+	ScanApi *lo_quantity = NULL;
+	ScanApi *lo_orderdate = NULL;
+	ScanApi *d_year = NULL;
+	ScanApi *c_mktsegment = NULL;
 
-	virtual void siliconDB() = 0;
-	virtual void opAtaTime() = 0;
+	JoinApi *lineorder_date = NULL;
+
+	virtual void scanPipeline() = 0;
+	virtual void joinPipeline() = 0;
+
+	virtual void siliconDB(ScanApi *&) = 0;
+
+	vector<volatile void*> read_buffers;
+	vector<volatile void*> write_buffers;
 
 public:
 	ThreadHandler(Syncronizer *sync, EXEC_TYPE e_type, int thr_id) {
 		this->thr_sync = sync;
 		this->eType = e_type;
 		this->thr_id = thr_id;
-
 	}
 
 	int getId() {
@@ -62,14 +74,25 @@ public:
 		t_stream = stream;
 	}
 
-	void setQueues(WorkQueue *shared_queue, WorkQueue *sw_queue, WorkQueue *hw_queue) {
-		this->shared_queue = shared_queue;
-		this->sw_queue = sw_queue;
-		this->hw_queue = hw_queue;
+	void setQueues(WorkQueue *queue1, WorkQueue *queue2) {
+		this->scan_queue = queue1;
+		this->join_queue = queue2;
 	}
 
-	void setAPI(ScanApi* scanAPI) {
-		this->scanAPI = scanAPI;
+	void setFPGAQueue(WorkQueue *queue){
+		this->fpga_queue = queue;
+	}
+
+	void setScanAPIs(ScanApi* scan1, ScanApi* scan2, ScanApi* scan3, ScanApi* scan4, ScanApi* scan5) {
+		this->lo_discount = scan1;
+		this->lo_quantity = scan2;
+		this->lo_orderdate = scan3;
+		this->d_year = scan4;
+		this->c_mktsegment = scan5;
+	}
+
+	void setJoinAPI(JoinApi* join){
+		this->lineorder_date = join;
 	}
 
 };

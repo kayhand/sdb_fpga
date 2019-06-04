@@ -16,9 +16,7 @@ target_link_libraries(
     server_lib
     pthread
     sched_lib
-	mrw_lib
-	rp_lib
-	rb_lib
+	brw_lib
     wrapper_lib
   	
   	opae-c

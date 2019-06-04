@@ -97,10 +97,10 @@ public:
 		compressed_file.close();
 
 		c_encoder.distinct_values = c_encoder.dictionary.size();
-	    std::cout << c_encoder.num_of_bits << " bits and " << c_encoder.distinct_values << " keys " << std::endl;
-	    for(auto &curr : this->c_encoder.dictionary){
-	    	std::cout << curr.first << " -> " << curr.second << std::endl;
-	    }
+	    //std::cout << c_encoder.num_of_bits << " bits and " << c_encoder.distinct_values << " keys " << std::endl;
+	    //for(auto &curr : this->c_encoder.dictionary){
+	    //	std::cout << curr.first << " -> " << curr.second << std::endl;
+	    //}
 	}
 
 	/*
@@ -116,9 +116,9 @@ public:
 	/*
 	 * Create a partition out of each page
 	 */
-	int initializePageAlignedPartitions(int page_size){
-		int num_of_pages = NumOfPagesRequired(page_size);
-		int partition_size = (page_size * 8) / this->c_encoder.num_of_bits;
+	int initializePageAlignedPartitions(){
+		int num_of_pages = NumOfPagesRequired(PAGE_SIZE);
+		int partition_size = (PAGE_SIZE * 8) / this->c_encoder.num_of_bits;
 
 		int partId = 0;
 		for(; partId < num_of_pages; partId++){

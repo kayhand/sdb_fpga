@@ -24,7 +24,7 @@ install(DIRECTORY common/include/safe_string
   COMPONENT safestrheaders)
 
 set (CMAKE_CXX_FLAGS "-g -O3 -std=c++1y")
-set (CMAKE_ARCHITECTURE_FLAGS "-m64 -msse2")
+set (CMAKE_ARCHITECTURE_FLAGS "-m64 -mmmx -msse -msse2 -mbmi2")
 
 INCLUDE_DIRECTORIES(/lib)
 LINK_DIRECTORIES(/lib)
@@ -34,7 +34,5 @@ LINK_DIRECTORIES(/homes/kayhan/intel-fpga-bbb/BBB_cci_mpf/sw/build)
 #include(intel_fpga_bbb)
 
 INCLUDE_DIRECTORIES(${SILLICONDB_SOURCE_DIR}/src)
-
-INCLUDE_DIRECTORIES(${SILLICONDB_BINARY_DIR}/src/fpga/operators/read_pred/hw/include)
 
 add_subdirectory(src/)

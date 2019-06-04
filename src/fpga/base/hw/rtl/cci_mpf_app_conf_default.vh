@@ -29,7 +29,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 // Application default configuration can override the base configuration.
-`include "cci_mpf_app_conf.vh"
+`include "mpf_conf.vh"
 
 //
 // MPF default configuration.

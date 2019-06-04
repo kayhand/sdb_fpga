@@ -8,6 +8,8 @@ class Syncronizer {
 	pthread_barrier_t start_barrier;
 	pthread_barrier_t end_barrier;
 
+	pthread_barrier_t fpga_barrier;
+
 	std::atomic<int> agg_counter;
 
 public:
@@ -15,6 +17,7 @@ public:
 
 	void initBarriers(int num_of_workers) {
 		pthread_barrier_init(&start_barrier, NULL, num_of_workers);
+		pthread_barrier_init(&fpga_barrier, NULL, num_of_workers);
 		pthread_barrier_init(&end_barrier, NULL, num_of_workers);
 	}
 
@@ -22,7 +25,7 @@ public:
 		agg_counter = ATOMIC_VAR_INIT(num_of_parts);
 	}
 
-	void incrementAggCounter() {
+	void decrementAggCounter() {
 		agg_counter--;
 	}
 
@@ -34,12 +37,17 @@ public:
 		pthread_barrier_wait(&start_barrier);
 	}
 
+	void waitOnFPGABarrier() {
+		pthread_barrier_wait(&fpga_barrier);
+	}
+
 	void waitOnEndBarrier() {
 		pthread_barrier_wait(&end_barrier);
 	}
 
 	void destroyBarriers() {
 		pthread_barrier_destroy(&start_barrier);
+		pthread_barrier_destroy(&fpga_barrier);
 		pthread_barrier_destroy(&end_barrier);
 	}
 
