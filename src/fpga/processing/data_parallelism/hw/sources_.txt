@@ -1,0 +1,16 @@
+base_afu.json
+
+C:/homes/kayhan/sdb_fpga/src/fpga/base/hw/rtl/base_sources.txt
+
++incdir+
+../../../../operators/filter_scan/hw/rtl/4bits/p1.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p2.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p4.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p8.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p16.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p32.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p64.sv
+../../../../operators/filter_scan/hw/rtl/4bits/p128.sv
+
+base_afu.sv
+scan_afu.sv

@@ -57,6 +57,10 @@ public:
 		return tail.load(std::memory_order_relaxed);
 	}
 
+	bool isEmpty(){
+		return (getHead() == getTail());
+	}
+
 	bool isNotEmpty(){
 		return (getHead() != getTail());
 	}

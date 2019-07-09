@@ -40,19 +40,21 @@ protected:
 
 	ScanApi *lo_discount = NULL;
 	ScanApi *lo_quantity = NULL;
-	ScanApi *lo_orderdate = NULL;
 	ScanApi *d_year = NULL;
-	ScanApi *c_mktsegment = NULL;
 
 	JoinApi *lineorder_date = NULL;
 
-	virtual void scanPipeline() = 0;
-	virtual void joinPipeline() = 0;
+	virtual void scanAtATime(ScanApi *&) = 0;
+	virtual void joinAtATime(JoinApi *&) = 0;
 
-	virtual void siliconDB(ScanApi *&) = 0;
+	//virtual void scanPipeline() = 0;
 
-	vector<volatile void*> read_buffers;
-	vector<volatile void*> write_buffers;
+	//virtual void joinPipeline() = 0;
+
+	//virtual void siliconDB(ScanApi *&) = 0;
+
+	unordered_map<int, vector<volatile void*>> read_buffers;
+	unordered_map<int, vector<volatile void*>> write_buffers;
 
 public:
 	ThreadHandler(Syncronizer *sync, EXEC_TYPE e_type, int thr_id) {
@@ -63,6 +65,14 @@ public:
 
 	int getId() {
 		return this->thr_id;
+	}
+
+	void addWorkItems(JOB_TYPE j_type, WorkQueue *queue, int num_of_partitions){
+    	for(int p_id = 0; p_id < num_of_partitions; p_id++){
+    		Query item(0, p_id, j_type);
+    		Node *newNode = new Node(item);
+    		queue->add(newNode);
+    	}
 	}
 
 	void addNewJob(int r_id, int p_id, JOB_TYPE j_type, WorkQueue *queue) {
@@ -83,13 +93,12 @@ public:
 		this->fpga_queue = queue;
 	}
 
-	void setScanAPIs(ScanApi* scan1, ScanApi* scan2, ScanApi* scan3, ScanApi* scan4, ScanApi* scan5) {
+	void setScanAPIs(ScanApi* scan1, ScanApi* scan2, ScanApi* scan3) {
 		this->lo_discount = scan1;
 		this->lo_quantity = scan2;
-		this->lo_orderdate = scan3;
-		this->d_year = scan4;
-		this->c_mktsegment = scan5;
+		this->d_year = scan3;
 	}
+
 
 	void setJoinAPI(JoinApi* join){
 		this->lineorder_date = join;

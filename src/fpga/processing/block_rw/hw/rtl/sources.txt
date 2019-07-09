@@ -1,0 +1,7 @@
+block_read.json
+
+C:/homes/kayhan/sdb_fpga/src/fpga/processing/base/hw/rtl/base_sources.txt
+
++incdir+
+../../../../operators/filter_scan/hw/rtl/p64_1block.sv
+block_read.sv

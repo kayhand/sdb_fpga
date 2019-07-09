@@ -1,0 +1,14 @@
+base_afu.json
+
+C:/homes/kayhan/sdb_fpga/src/fpga/base/hw/rtl/base_sources.txt
+
++incdir+
+../../../../operators/ssb/filter_scan/d_year.sv
+../../../../operators/ssb/filter_scan/lo_discount.sv
+../../../../operators/ssb/filter_scan/lo_quantity.sv
+
+#../../../../operators/ssb/semi_join/lineorder_date.sv
+
+base_afu.sv
+scan_afu.sv
+#join_afu.sv

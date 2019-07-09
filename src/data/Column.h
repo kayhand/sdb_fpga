@@ -8,6 +8,7 @@
 #ifndef SRC_DATA_MICROBENCH_COLUMN_H_
 #define SRC_DATA_MICROBENCH_COLUMN_H_
 
+#include "util/Types.h"
 #include "Partition.h"
 
 #include <unordered_map>
@@ -26,11 +27,17 @@ private:
 		int num_of_bits; //c_mktsegment/meta.dat -- bit_encoding
 		uint32_t distinct_values; //c_mktsegment/meta.dat -- distinct_values
 
+		// base_value -> compressed_value
 		std::unordered_map<std::string, uint32_t> dictionary;
 	} c_encoder;
 
+	// compressed_value -> base_value
+	std::unordered_map<uint32_t, std::string> decoding_table;
+
 	std::string colPath;
-	std::string colName;
+
+	COLUMN_NAME colName;
+
 	int colSize;
 
 	int data_type = 2; // c_mktsegment/meta.dat -- data_type
@@ -39,7 +46,7 @@ private:
 	std::vector<Partition*> partitions;
 
 public:
-	Column(std::string col_name, int col_size){
+	Column(COLUMN_NAME col_name, int col_size){
 		this->colName = col_name;
 		this->colSize = col_size;
 	}
@@ -57,8 +64,8 @@ public:
 	 * Uncompressed column: ~/data/ssb/customer/c_mktsegment/base.dat
 	 * Compressed column: ~/data/ssb/customer/c_mktsegment/compressed.dat
 	 */
-	void initializeColumn(std::string colPath){
-		this->colPath = colPath;
+	void initializeColumn(std::string tablePath, std::string colPath){
+		this->colPath = tablePath + colPath + "/";
 
 		std::string bit_size;
 		std::string distinct_keys;
@@ -97,10 +104,12 @@ public:
 		compressed_file.close();
 
 		c_encoder.distinct_values = c_encoder.dictionary.size();
-	    //std::cout << c_encoder.num_of_bits << " bits and " << c_encoder.distinct_values << " keys " << std::endl;
-	    //for(auto &curr : this->c_encoder.dictionary){
-	    //	std::cout << curr.first << " -> " << curr.second << std::endl;
-	    //}
+
+	    for(auto &curr : this->c_encoder.dictionary){
+			if(this->decoding_table.find(curr.second) == this->decoding_table.end()){
+				this->decoding_table[curr.second] = curr.first;
+			}
+	    }
 	}
 
 	/*
@@ -140,13 +149,22 @@ public:
 		std::ifstream compressed_file;
 		compressed_file.open(this->colPath + "compressed.dat");
 
+		//printf("Reading column from path %s\n", this->colPath.c_str());
+
 		for(Partition *curPart : partitions){
-			//curPart->initializePartition(c_encoder.num_of_bits);
 			curPart->initializePageAlignedPartition(c_encoder.num_of_bits);
 			curPart->compress(compressed_file, c_encoder.num_of_bits);
 		}
 
 		compressed_file.close();
+	}
+
+	COLUMN_NAME& ColName(){
+		return this->colName;
+	}
+
+	std::string ColPath(){
+		return this->colPath;
 	}
 
 	int NumOfPartitions(){
@@ -157,12 +175,20 @@ public:
 		return this->partitions[0]->PartSize();
 	}
 
-	int BitEncoding(){
+	int &ColSize(){
+		return this->colSize;
+	}
+
+	int &BitEncoding(){
 		return this->c_encoder.num_of_bits;
 	}
 
 	uint64_t* PartData(int part_id){
 		return partitions[part_id]->Data();
+	}
+
+	int InputBufferLength(int part_id){
+		return partitions[part_id]->DataBufferSize();
 	}
 
 	std::vector<Partition*> Partitions(){
@@ -171,6 +197,10 @@ public:
 
 	uint32_t CompressValue(std::string uncompressed){
 		return this->c_encoder.dictionary[uncompressed];
+	}
+
+	std::string DecompressValue(uint32_t compressed){
+		return this->decoding_table[compressed];
 	}
 
 	int NumOfPagesRequired(int p_size){

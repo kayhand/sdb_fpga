@@ -14,7 +14,10 @@ ProcessingUnit::ProcessingUnit(int num_of_cus) {
 ProcessingUnit::~ProcessingUnit() {
 	for (CoreHandler* curHandler : coreHandlers)
 		delete curHandler;
-	delete fpgaHandler;
+
+	#ifdef __FPGA__
+		delete fpgaHandler;
+	#endif
 
 	//delete scanQueue.getHead();
 	//delete joinQueue.getHead();
@@ -24,25 +27,28 @@ ProcessingUnit::~ProcessingUnit() {
 	delete d_scan;
 	delete c_scan;
 
-	delete join;
+	delete lo_date_join;
 }
 
-void ProcessingUnit::createProcessingUnit(Syncronizer *thr_sync, PARALLELISM parallel_units){
-	fpgaHandler = new FPGAHandler(thr_sync, sched_approach, 0, parallel_units);
+void ProcessingUnit::createProcessingUnit(Syncronizer *thr_sync){
+	#ifdef __FPGA__
+		fpgaHandler = new FPGAHandler(thr_sync, sched_approach, 0);
 
-	fpgaHandler->setQueues(&scanQueue, &joinQueue);
-	fpgaHandler->setFPGAQueue(&fpgaQueue);
+		fpgaHandler->setQueues(&scanQueue, &joinQueue);
+		fpgaHandler->setFPGAQueue(&fpgaQueue);
 
-	fpgaHandler->setScanAPIs(lo_dsc_scan, lo_qty_scan, lo_odate_scan, d_scan, c_scan);
-	fpgaHandler->setJoinAPI(join);
+		fpgaHandler->setScanAPIs(lo_dsc_scan, lo_qty_scan, d_scan);
+		fpgaHandler->setJoinAPI(lo_date_join);
+	#endif
 
-	for (int i = 1; i < numOfComputeUnits; i++) {
+	//for (int i = 1; i < numOfComputeUnits; i++) {
+	for (int i = 0; i < numOfComputeUnits; i++) {
 		CoreHandler *handler = new CoreHandler(thr_sync, sched_approach, i);
 
 		handler->setQueues(&scanQueue, &joinQueue);
 
-		handler->setScanAPIs(lo_dsc_scan, lo_qty_scan, lo_odate_scan, d_scan, c_scan);
-		handler->setJoinAPI(join);
+		handler->setScanAPIs(lo_dsc_scan, lo_qty_scan, d_scan);
+		handler->setJoinAPI(lo_date_join);
 
 		coreHandlers.push_back(handler);
 	}
@@ -65,8 +71,8 @@ void ProcessingUnit::addJoinItems(int num_of_parts, JOB_TYPE join_job){
 }
 
 void ProcessingUnit::addWorkItems(ScanApi *&baseScan, WorkQueue &queue){
-	for (int p_id = 0; p_id < baseScan->TotalPartitions(); p_id++) {
-	//for (int p_id = 0; p_id < 1; p_id++) {
+	//for (int p_id = 0; p_id < baseScan->TotalPartitions(); p_id++) {
+	for (int p_id = 0; p_id < 1; p_id++) {
 		Query item(0, p_id, baseScan->JobType());
 		Node *newNode = new Node(item);
 		queue.add(newNode);
@@ -78,13 +84,18 @@ void ProcessingUnit::startThreads(TCPStream* connection) {
 		curHandler->setStream(connection);
 		curHandler->start(curHandler->getId(), false);
 	}
-	fpgaHandler->setStream(connection);
-	fpgaHandler->start(fpgaHandler->getId(), true);
+	#ifdef __FPGA__
+		fpgaHandler->setStream(connection);
+		fpgaHandler->start(fpgaHandler->getId(), true);
+	#endif
 }
 
 void ProcessingUnit::joinThreads() {
 	for (CoreHandler* curHandler : coreHandlers) {
 		curHandler->join();
 	}
-	fpgaHandler->join();
+
+	#ifdef __FPGA__
+		fpgaHandler->join();
+	#endif
 }

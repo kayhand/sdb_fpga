@@ -1,7 +1,12 @@
 #ifndef __syncronizer_h__
 #define __syncronizer_h__
 
+#include "util/PThreadBarrier.h"
+
+#ifndef __APPLE__
 #include <pthread.h>
+#endif
+
 #include <atomic>
 
 class Syncronizer {
@@ -13,7 +18,9 @@ class Syncronizer {
 	std::atomic<int> agg_counter;
 
 public:
-	Syncronizer() {}
+	Syncronizer(int num_of_workers) {
+		initBarriers (num_of_workers);
+	}
 
 	void initBarriers(int num_of_workers) {
 		pthread_barrier_init(&start_barrier, NULL, num_of_workers);

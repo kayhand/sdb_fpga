@@ -35,19 +35,10 @@ public:
 		return this->job_type;
 	}
 
-	void flipDax() {
-		dax_flag = !dax_flag;
-	}
-
-	bool &isDax() {
-		return dax_flag;
-	}
-
 private:
 	int p_type = -1;
 	int part_id = -1;
-	JOB_TYPE job_type = LD_JOIN;
-	bool dax_flag = false;
+	JOB_TYPE job_type = D_YEAR_SCAN;
 };
 
 #endif

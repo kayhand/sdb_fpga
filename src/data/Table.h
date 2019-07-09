@@ -15,7 +15,8 @@ class Table {
 private:
 	std::string tableName;
 	std::string tablePath;
-	std::vector<Column*> columns;
+
+	std::unordered_map<int, Column*> columns;
 
 	int num_of_elements = 0;
 
@@ -25,15 +26,18 @@ public:
 	}
 
 	~Table(){
-		for(Column *column : columns){
-			delete column;
+		for(auto &entry : columns){
+			delete entry.second;
 		}
 	}
 
-	/* Read in metadata information for the corresponding relation
+	/*
+	 * Read in metadata information for the corresponding relation
 	 */
-	void initializeTable(std::string path){
-		this->tablePath = path;
+
+	// "~/data/ssb/"
+	void initializeTable(std::string basePath){
+		this->tablePath = basePath + this->tableName + "/"; // "~/data/ssb/" + "lineorder" + "/"
 	    std::ifstream file;
 	    file.open(this->tablePath + "meta.dat");
 	    std::string num_of_vals;
@@ -43,8 +47,26 @@ public:
 		num_of_elements = atoi(num_of_vals.c_str());
 	}
 
-	void addColumn(Column *col){
-		columns.push_back(col);
+	// Enum to int casting for parameter
+	Column*& getColumn(int colId){
+		return columns.at(colId);
+	}
+
+	// "lo_discount"
+	void createColumn(std::string columnFile, COLUMN_NAME columnName){
+		Column *column = new Column(columnName, this->NumOfElements());
+		column->initializeColumn(this->Path(), columnFile);
+		int num_of_partitions = column->initializePageAlignedPartitions();
+		column->compressColumn();
+
+		columns.insert({columnName, column});
+
+		printf("\n");
+		std::cout << "[M] Column " << columnFile << " info: " << std::endl;
+		std::cout << "           Path: " << column->ColPath() << std::endl;
+		std::cout << "           Encoding: " << column->BitEncoding() << "-bits" << std::endl;
+		std::cout << "           # of parts: " << column->NumOfPartitions() << std::endl;
+
 	}
 
 	int NumOfElements(){
